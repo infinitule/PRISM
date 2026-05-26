@@ -1,10 +1,12 @@
 <div align="center">
 
-# ⬡ fiber-agi
+# ⬡ PRISM
 
-### A neural network where every dot product is a pulse of light.
+### Photonic Recursive Intelligence with Synaptic Memory
 
-[![tests](https://github.com/infinitule/fiber-agi/actions/workflows/tests.yml/badge.svg)](https://github.com/infinitule/fiber-agi/actions/workflows/tests.yml)
+*A neural network where every dot product is a pulse of light.*
+
+[![tests](https://github.com/infinitule/PRISM/actions/workflows/tests.yml/badge.svg)](https://github.com/infinitule/PRISM/actions/workflows/tests.yml)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://python.org)
 [![NumPy](https://img.shields.io/badge/numpy-%E2%89%A51.24-013243?logo=numpy)](https://numpy.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -18,6 +20,11 @@ Laser 1550 nm  →  IQ mod (φ=0/π)  →  SMF G.652  →  EDFA  →  DCF
 *Coherent light computes. Phase encodes sign. The seed generates its own generator.*
 
 </div>
+
+---
+
+> Built at **IIT Mandi** · Himshikhar 2026 · Agentic AI research
+> — where the Himalayas meet the frontier of machine intelligence.
 
 ---
 
@@ -51,7 +58,7 @@ This opens a path to **inference at the speed of light** — and this repo is th
 ## Quick start
 
 ```bash
-git clone https://github.com/infinitule/fiber-agi
+git clone https://github.com/infinitule/PRISM.git
 cd fiber-agi
 pip install numpy
 
@@ -322,6 +329,6 @@ MIT — use it, fork it, build on it.
 
 *The seed generates its own generator. Recursion is not a technique — it is the substrate.*
 
-[⭐ Star this repo](https://github.com/infinitule/fiber-agi) · [🐛 Open an issue](https://github.com/infinitule/fiber-agi/issues) · [🔀 Fork and extend](https://github.com/infinitule/fiber-agi/fork)
+[⭐ Star this repo](https://github.com/infinitule/PRISM) · [🐛 Open an issue](https://github.com/infinitule/PRISM/issues) · [🔀 Fork and extend](https://github.com/infinitule/PRISM/fork)
 
 </div>
