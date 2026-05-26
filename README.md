@@ -770,7 +770,7 @@ V1 requires 4 optical passes for positive/negative weight decomposition (Zang et
 
 <table>
 <tr>
-<td width="200" align="center">
+<td width="640" align="center">
 <b>Chandandeep Sharma</b><br>
 <sub>IIT Mandi · Himshikhar 2026</sub><br><br>
 <sub>Studying Agentic AI systems at one of India's frontier technical institutes — situated in the Uhl river valley of the Himalayas, where the altitude matches the ambition.</sub><br><br>
