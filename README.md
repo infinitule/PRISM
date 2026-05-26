@@ -780,7 +780,7 @@ V1 requires 4 optical passes for positive/negative weight decomposition (Zang et
 </tr>
 </table>
 
-> *"The Himalayas taught us that the highest peaks are reached one recursive step at a time."*
+> *"The Himalayas taught me that the highest peaks are conquered one recursive step at a time."*
 
 ---
 
