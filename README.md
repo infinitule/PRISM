@@ -1,6 +1,13 @@
 <div align="center">
 
-# ⬡ PRISM
+```
+██████╗ ██████╗ ██╗███████╗███╗   ███╗
+██╔══██╗██╔══██╗██║██╔════╝████╗ ████║
+██████╔╝██████╔╝██║███████╗██╔████╔██║
+██╔═══╝ ██╔══██╗██║╚════██║██║╚██╔╝██║
+██║     ██║  ██║██║███████║██║ ╚═╝ ██║
+╚═╝     ╚═╝  ╚═╝╚═╝╚══════╝╚═╝     ╚═╝
+```
 
 ### Photonic Recursive Intelligence with Synaptic Memory
 
@@ -10,15 +17,33 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![no GPU](https://img.shields.io/badge/GPU-not%20required-lightgrey.svg)]()
 
+</div>
+
 ```
-Laser 1550 nm  →  IQ mod (φ=0/π)  →  SMF G.652  →  EDFA  →  DCF
-→  90°-hybrid  →  balanced PD  →  I = Σ wᵢxᵢ   (exact, single pass)
+╔══════════════════════════════════════════════════════════════╗
+║  ◈  OPTICAL COMPUTE SUBSTRATE                               ║
+╠══════════════════════════════════════════════════════════════╣
+║                                                              ║
+║  Laser 1550 nm                                               ║
+║      │                                                       ║
+║      ▼                                                       ║
+║  IQ mod  φ=0 (w≥0, constructive)  ──────────────────────┐  ║
+║  IQ mod  φ=π (w<0, destructive)                          │  ║
+║      │                                                    │  ║
+║      ▼                                                    ▼  ║
+║  SMF G.652  →  EDFA  →  DCF  →  90°-hybrid  →  PD        ║  ║
+║                                                            ║  ║
+║  I  =  R · E_LO · Re(Σ wᵢxᵢ · eʲᶠ)  =  Σ wᵢxᵢ          ║  ║
+║                              ↑                             ║  ║
+║                         exact · single pass · zero gap    ║  ║
+╚══════════════════════════════════════════════════════════════╝
 ```
+
+<div align="center">
 
 *Coherent light computes. Phase encodes sign. The seed generates its own generator.*
 
-> Built at **IIT Mandi** · Himshikhar 2026 · Agentic AI research
-> — where the Himalayas meet the frontier of machine intelligence.
+`IIT Mandi` · `Himshikhar 2026` · `Agentic AI` · `Himalayas`
 
 </div>
 
