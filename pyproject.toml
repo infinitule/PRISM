@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "fiber-agi"
+version = "1.0.0"
+description = "Virtual fiber optic neural network — coherent IQ neurons, recursive meta-prompt, 4 production telecom classifiers"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.24"]
+keywords = [
+  "fiber optics", "optical neural network", "photonic computing",
+  "coherent detection", "telecom AI", "recursive AGI", "meta-prompt",
+  "WDM", "DCF", "homodyne", "modulation recognition"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Telecommunications Industry",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+
+[project.scripts]
+fiber-agi       = "fiber_agi.main:main"
+fiber-agi-demo  = "fiber_agi.use_cases:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["fiber_agi*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
