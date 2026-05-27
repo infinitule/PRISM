@@ -35,6 +35,8 @@ Physical substrate (unchanged across all use cases):
 import numpy as np
 import sys
 import os
+import json
+import csv
 
 # ── path fix so we can import from same directory ────────────────────────────
 sys.path.insert(0, os.path.dirname(__file__))
@@ -643,6 +645,337 @@ def main():
     print(f"  Layers generated     : {len(mp.history)}")
     print(f"\n  One photon.  Four minds.  All at light speed.")
     print(f"{'█'*62}\n")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# T1 — REAL DATA BRIDGE: CSV / JSON ingestion + domain-shift detection
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def load_csv_dataset(path: str,
+                     feature_cols: list[str] | None = None,
+                     label_col: str | None = None,
+                     class_map: dict | None = None,
+                     max_rows: int | None = None) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """
+    T1: Load any OSNR/BER/OTDR CSV and return (X, Y, class_names) in <10s.
+
+    Args:
+        path         : path to CSV file
+        feature_cols : list of column names to use as features.
+                       If None, all numeric columns except label_col are used.
+        label_col    : column name for class labels. If None, last column is used.
+        class_map    : dict mapping raw label strings to integer class indices.
+                       If None, labels are auto-enumerated alphabetically.
+        max_rows     : if set, only load this many rows (for streaming preview)
+
+    Returns:
+        X            : (N, n_features) float array
+        Y            : (N, n_classes) one-hot float array
+        class_names  : list of class name strings
+
+    Usage:
+        X, Y, classes = load_csv_dataset('network_telemetry.csv',
+                                          feature_cols=['OSNR','BER','EVM'],
+                                          label_col='fault_type')
+    """
+    rows = []
+    with open(path, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        headers = reader.fieldnames or []
+        for k, row in enumerate(reader):
+            if max_rows is not None and k >= max_rows:
+                break
+            rows.append(row)
+
+    if not rows:
+        raise ValueError(f"CSV file is empty or has no data rows: {path}")
+
+    # Determine label column
+    if label_col is None:
+        label_col = headers[-1]
+
+    # Determine feature columns
+    if feature_cols is None:
+        feature_cols = [h for h in headers
+                        if h != label_col and _is_numeric_col(rows, h)]
+
+    # Build class map
+    raw_labels = [r[label_col] for r in rows]
+    if class_map is None:
+        unique_labels = sorted(set(raw_labels))
+        class_map = {lbl: i for i, lbl in enumerate(unique_labels)}
+    class_names = [k for k, v in sorted(class_map.items(), key=lambda x: x[1])]
+    n_classes = len(class_names)
+
+    X_list, Y_list = [], []
+    for row in rows:
+        try:
+            x_row = np.array([float(row[c]) for c in feature_cols], dtype=float)
+        except (ValueError, KeyError):
+            continue
+        label_int = class_map.get(row[label_col], 0)
+        y_row = np.zeros(n_classes)
+        y_row[label_int] = 1.0
+        X_list.append(x_row)
+        Y_list.append(y_row)
+
+    return np.array(X_list), np.array(Y_list), class_names
+
+
+def _is_numeric_col(rows: list[dict], col: str) -> bool:
+    """Check if a CSV column is numeric (float-parseable)."""
+    for row in rows[:20]:
+        try:
+            float(row.get(col, ''))
+        except (ValueError, TypeError):
+            return False
+    return True
+
+
+def load_json_stream(path: str,
+                     feature_keys: list[str],
+                     label_key: str,
+                     class_map: dict | None = None,
+                     max_records: int | None = None) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """
+    T1: Load a newline-delimited JSON stream (NDJSON/gRPC-style telemetry).
+
+    Each line must be a JSON object with numeric feature fields and a label field.
+    Tolerates extra fields. Empty/malformed lines are skipped.
+
+    Args:
+        path         : path to .json or .ndjson file
+        feature_keys : list of keys to extract as features
+        label_key    : key for class label (string or integer)
+        class_map    : optional {label_string: class_index} mapping
+        max_records  : max lines to read
+
+    Returns:
+        X, Y, class_names
+
+    Usage:
+        X, Y, cls = load_json_stream('telemetry.ndjson',
+                                      feature_keys=['osnr','ber','evm','dgd'],
+                                      label_key='impairment')
+    """
+    records = []
+    with open(path, encoding='utf-8') as f:
+        for k, line in enumerate(f):
+            if max_records is not None and k >= max_records:
+                break
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    raw_labels = [str(r.get(label_key, 'unknown')) for r in records]
+    if class_map is None:
+        unique_labels = sorted(set(raw_labels))
+        class_map = {lbl: i for i, lbl in enumerate(unique_labels)}
+    class_names = [k for k, v in sorted(class_map.items(), key=lambda x: x[1])]
+    n_classes = len(class_names)
+
+    X_list, Y_list = [], []
+    for r, raw_lbl in zip(records, raw_labels):
+        try:
+            x_row = np.array([float(r[k]) for k in feature_keys], dtype=float)
+        except (KeyError, ValueError, TypeError):
+            continue
+        label_int = class_map.get(raw_lbl, 0)
+        y_row = np.zeros(n_classes)
+        y_row[label_int] = 1.0
+        X_list.append(x_row)
+        Y_list.append(y_row)
+
+    return np.array(X_list), np.array(Y_list), class_names
+
+
+def detect_domain_shift(X_ref: np.ndarray, X_new: np.ndarray,
+                        threshold: float = 2.0) -> dict:
+    """
+    T1: Lightweight domain-shift detector.
+    Compares per-feature mean and std of a reference dataset vs new batch.
+    Uses z-score: |μ_new - μ_ref| / σ_ref.
+
+    Returns dict with:
+        shifted         : bool — True if any feature exceeds threshold
+        z_scores        : per-feature z-score of mean shift
+        feature_alerts  : list of feature indices where z > threshold
+        max_z           : maximum z-score observed
+        drift_summary   : human-readable string
+    """
+    mu_ref  = X_ref.mean(axis=0)
+    std_ref = X_ref.std(axis=0) + 1e-8
+    mu_new  = X_new.mean(axis=0)
+    z       = np.abs(mu_new - mu_ref) / std_ref
+    alerts  = [int(i) for i in np.where(z > threshold)[0]]
+
+    return {
+        'shifted':        bool(len(alerts) > 0),
+        'z_scores':       z.tolist(),
+        'feature_alerts': alerts,
+        'max_z':          float(z.max()),
+        'drift_summary':  (f"Domain shift detected on {len(alerts)} features "
+                           f"(max z={z.max():.2f})" if alerts
+                           else f"No shift detected (max z={z.max():.2f})"),
+    }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# T2 — SCALE BREAKOUT: MIC-64 (64-feature ITU-T G.826/G.829 measurement)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MIC64_FEATURES = [
+    # Block A — Signal quality (8)
+    'EVM(%)', 'Q-factor(dB)', 'Eye-open', 'BER(log)',
+    'Spec-skew', 'RMS-jitter(ps)', 'CD-est(ps/nm)', 'DGD(ps)',
+    # Block B — OSNR hierarchy (8)
+    'OSNR(dB)', 'OSNR-NB(dB)', 'SNR-elec(dB)', 'ASE-power(dBm)',
+    'NF-path(dB)', 'NF-avg(dB)', 'Pol-dep-loss(dB)', 'OCSR(dB)',
+    # Block C — Nonlinear diagnostics (8)
+    'SPM-coef', 'XPM-coef', 'FWM-eff', 'SRS-tilt(dB/THz)',
+    'Xpol-mod-idx', 'NLI-coef', 'GN-noise(dBm)', 'NL-phase(rad)',
+    # Block D — Chromatic & PMD (8)
+    'CD-residual(ps/nm)', 'CD-slope(ps/nm²)', 'SOPMD(ps²)',
+    'PDL(dB)', 'DGD-avg(ps)', 'DGD-max(ps)', 'PSP-angle(deg)', 'Pol-rotation(deg)',
+    # Block E — Power & gain (8)
+    'TX-power(dBm)', 'RX-power(dBm)', 'Path-loss(dB)', 'Span-loss(dB)',
+    'EDFA-gain(dB)', 'EDFA-NF(dB)', 'Launch-pow(dBm)', 'OSC-pow(dBm)',
+    # Block F — Spectral (8)
+    'Wavelength(nm)', 'Freq-offset(GHz)', 'BW-3dB(GHz)', 'BW-10dB(GHz)',
+    'Side-lobe-rej(dB)', 'Spec-flatness(dB)', 'Comb-spacing(GHz)', 'Guard-band(GHz)',
+    # Block G — OTDR / physical (8)
+    'Backscatter-slope(dB/km)', 'Event-power(dB)', 'Event-dist(km)',
+    'Pulse-width(ns)', 'Dead-zone(m)', 'Reflectance(dB)', 'Loss-rate(dB/km)', 'ORL(dB)',
+    # Block H — G.826/G.829 performance (8)
+    'ES-ratio', 'SES-ratio', 'BBE-ratio', 'UNAVAIL-ratio',
+    'G826-margin(dB)', 'FEC-overhead(%)', 'Corrected-errors(log)', 'Uncorr-errors(log)',
+]
+
+
+def _mic64_sample(rng, label: int) -> np.ndarray:
+    """
+    Generate a 64-feature ITU-T G.826/G.829 measurement vector.
+    Extends _mic_sample() with realistic physical cross-correlations.
+    """
+    n = lambda mu, s: float(rng.normal(mu, s))
+
+    # Base 8 features (same as MIC-8 for continuity)
+    base = _mic_sample(rng, label)
+
+    if label == 0:   # Normal
+        blk_b = [n(28,1),   n(26,1),   n(20,1),   n(-30,1),   n(5,0.3),  n(5.5,0.3),  n(0.3,0.05),  n(40,1)]
+        blk_c = [n(0.1,0.02),n(0.05,0.01),n(0.02,0.005),n(0.1,0.02), n(0.01,0.002),n(0.05,0.01),n(-40,1), n(0.05,0.01)]
+        blk_d = [n(10,2),   n(0.05,0.01),n(0.1,0.02), n(0.3,0.05), n(1.0,0.2),  n(2.5,0.5),  n(45,5),   n(10,2)]
+        blk_e = [n(2,0.2),  n(-15,0.3), n(17,0.5),  n(0.2,0.05), n(20,0.5),   n(5,0.3),    n(1,0.2),   n(-35,1)]
+        blk_f = [n(1550,0.01),n(0.1,0.05),n(37,0.5),n(60,1),     n(30,1),     n(0.5,0.1),  n(50,0.1),  n(12,0.2)]
+        blk_g = [n(0.20,0.01),n(0,0.05), n(50,5),   n(10,1),     n(1.0,0.1),  n(-60,2),    n(0.20,0.01),n(40,1)]
+        blk_h = [n(0.001,0.0002),n(0.0001,0.00002),n(0.00001,0.000002),n(0,0),
+                 n(5,0.5), n(7,0.2), n(-5,0.3), n(-15,0.5)]
+
+    elif label == 1:   # CD-dominant
+        blk_b = [n(20,1.5), n(18,1.5), n(12,1.5), n(-25,1.5), n(7,0.5),  n(7,0.5),    n(0.5,0.1),   n(38,1)]
+        blk_c = [n(0.15,0.03),n(0.08,0.02),n(0.03,0.01),n(0.2,0.05), n(0.02,0.005),n(0.1,0.02),n(-38,1), n(0.1,0.02)]
+        blk_d = [n(800,50),  n(0.5,0.1),n(0.5,0.1),  n(0.5,0.1),  n(1.5,0.3),  n(4,1),      n(45,10),  n(15,3)]
+        blk_e = [n(1.5,0.3), n(-18,0.5),n(19,0.5),   n(0.5,0.1),  n(20,0.5),   n(5.5,0.3),  n(1,0.2),  n(-35,1)]
+        blk_f = [n(1550,0.02),n(0.5,0.1),n(35,1),    n(62,2),     n(27,2),     n(1.0,0.3),  n(50,0.2),  n(12,0.3)]
+        blk_g = [n(0.22,0.01),n(1.5,0.25),n(25,3),   n(10,1),     n(1.0,0.1),  n(-35,2.5),  n(0.20,0.01),n(38,1)]
+        blk_h = [n(0.005,0.001),n(0.001,0.0002),n(0.0001,0.00002),n(0,0),
+                 n(3,0.5), n(7,0.2), n(-3,0.3), n(-10,0.5)]
+
+    elif label == 2:   # PMD-dominant
+        blk_b = [n(21,1.5), n(19,1.5), n(13,1.5), n(-26,1.5), n(6.5,0.5), n(6.5,0.5),  n(0.8,0.1),   n(37,1)]
+        blk_c = [n(0.12,0.03),n(0.07,0.02),n(0.025,0.008),n(0.15,0.04),n(0.015,0.004),n(0.08,0.02),n(-38,1),n(0.08,0.02)]
+        blk_d = [n(15,5),    n(0.07,0.02),n(8,2),      n(1.5,0.3),  n(25,5),     n(40,10),    n(60,15),  n(25,5)]
+        blk_e = [n(1.5,0.3), n(-17.5,0.5),n(19,0.5),   n(0.5,0.1),  n(20,0.5),   n(5.5,0.3),  n(1,0.2),  n(-35,1)]
+        blk_f = [n(1550,0.01),n(0.2,0.05),n(36,0.8),   n(61,1.5),   n(28,1.5),   n(0.8,0.2),  n(50,0.15), n(12,0.25)]
+        blk_g = [n(0.21,0.01),n(0.8,0.15),n(30,4),     n(10,1),     n(0.4,0.04), n(-70,2.5),  n(0.20,0.01),n(39,1)]
+        blk_h = [n(0.004,0.001),n(0.0008,0.0002),n(0.00008,0.00002),n(0,0),
+                 n(3.5,0.5), n(7,0.2), n(-3.5,0.3), n(-11,0.5)]
+
+    elif label == 3:   # OSNR-limited
+        blk_b = [n(16,2),   n(14,2),   n(8,2),    n(-22,2),   n(8,0.6),  n(8.5,0.6),  n(1.2,0.2),   n(35,1.5)]
+        blk_c = [n(0.12,0.03),n(0.06,0.015),n(0.025,0.008),n(0.15,0.04),n(0.015,0.004),n(0.08,0.02),n(-37,1),n(0.08,0.02)]
+        blk_d = [n(12,3),    n(0.06,0.015),n(0.2,0.05),  n(0.4,0.08),  n(2.0,0.4),  n(5,1),      n(50,10),  n(12,3)]
+        blk_e = [n(0.5,0.3), n(-22,0.6), n(22.5,0.6),  n(1.5,0.3),  n(20,0.5),   n(6.5,0.4),  n(0.5,0.2), n(-35,1)]
+        blk_f = [n(1550,0.01),n(0.3,0.08),n(35,1),      n(62,2),     n(26,2),     n(1.2,0.3),  n(50,0.2),  n(12,0.3)]
+        blk_g = [n(0.21,0.01),n(0.2,0.05),n(40,5),      n(10,1),     n(1.0,0.1),  n(-58,2.5),  n(0.20,0.01),n(39,1)]
+        blk_h = [n(0.008,0.001),n(0.002,0.0005),n(0.0002,0.00005),n(0,0),
+                 n(2.5,0.5), n(7,0.2), n(-2.5,0.3), n(-8,0.5)]
+
+    else:              # Nonlinear
+        blk_b = [n(19,1.5), n(17,1.5), n(11,1.5), n(-24,1.5), n(7.5,0.5), n(7,0.5),   n(0.9,0.15),  n(36,1)]
+        blk_c = [n(0.5,0.05),n(0.3,0.04),n(0.15,0.02),n(0.8,0.1), n(0.1,0.02),n(0.4,0.05),n(-35,1.5),n(0.5,0.05)]
+        blk_d = [n(20,5),    n(0.1,0.02),n(0.3,0.06),  n(0.6,0.1),  n(1.8,0.4),  n(4.5,1),    n(50,10),  n(15,3)]
+        blk_e = [n(3,0.3),   n(-14,0.4), n(17,0.5),    n(0.3,0.06), n(20,0.5),   n(5,0.3),    n(2,0.2),   n(-35,1)]
+        blk_f = [n(1550,0.02),n(0.4,0.1),n(36,1),      n(62,2),     n(27,2),     n(1.5,0.4),  n(50,0.2),  n(12,0.3)]
+        blk_g = [n(0.22,0.01),n(0.8,0.15),n(35,4),     n(10,1),     n(1.0,0.1),  n(-55,2.5),  n(0.20,0.01),n(38,1)]
+        blk_h = [n(0.006,0.001),n(0.0015,0.0003),n(0.00015,0.00003),n(0,0),
+                 n(2.8,0.5), n(7,0.2), n(-2.8,0.3), n(-9,0.5)]
+
+    return np.concatenate([base, blk_b, blk_c, blk_d, blk_e, blk_f, blk_g, blk_h])
+
+
+def generate_mic64_dataset(n: int = 500, seed: int = 42) -> tuple[np.ndarray, np.ndarray]:
+    """Generate a 64-feature MIC dataset (N samples, 5 classes)."""
+    rng   = np.random.default_rng(seed)
+    n_cls = len(MIC_CLASSES)
+    X, Y  = [], []
+    for label in range(n_cls):
+        for _ in range(n // n_cls):
+            X.append(_mic64_sample(rng, label))
+            y = np.zeros(n_cls); y[label] = 1.0
+            Y.append(y)
+    X, Y = np.array(X), np.array(Y)
+    idx  = rng.permutation(len(X))
+    return X[idx], Y[idx]
+
+
+def run_uc5_mic64(mp, verbose: bool = True):
+    """
+    T2: Run UC5 — MIC with 64 ITU-T G.826/G.829 features.
+    Network: [64, 128, 64, 32, 5] coherent fiber NN.
+    """
+    print("\n" + "━"*62)
+    print("  USE CASE 5 — MIC-64 (ITU-T G.826/G.829 Full Feature Set)")
+    print("  64-feature broadband impairment classifier")
+    print("━"*62)
+    print(f"  Classes  : {' | '.join(MIC_CLASSES)}")
+    print(f"  Features : 64 (8 blocks × 8 ITU-T metrics)")
+    print(f"  Dataset  : 500 samples  ·  80/20 split")
+    print(f"  Network  : [64, 128, 64, 32, 5]  coherent fiber NN")
+
+    X, Y  = generate_mic64_dataset(n=500)
+    split = int(0.8 * len(X))
+    X_tr, Y_tr = X[:split], Y[:split]
+    X_te, Y_te = X[split:], Y[split:]
+
+    print(f"\n  [Training theoretic model → coherent fiber NN]")
+    fiber_nn, acc, th_acc, trainer = _train_and_transfer(
+        [64, 128, 64, 32, 5], X_tr, Y_tr, X_te, Y_te,
+        epochs=800, lr=1e-3, mp=mp, verbose=verbose)
+
+    print(f"\n  Theory  accuracy : {th_acc*100:.1f}%")
+    print(f"  Fiber   accuracy : {acc*100:.1f}%")
+    print(f"  WDM λ-channels  : {fiber_nn.total_lambda_channels()}")
+    _print_conf_matrix(fiber_nn, X_te, Y_te, MIC_CLASSES)
+
+    # Domain-shift probe: slight mean shift on OSNR features (block B)
+    rng_probe = np.random.default_rng(77)
+    x_probe   = _mic64_sample(rng_probe, 2)   # PMD event
+    print(f"\n  ── Live MIC-64 probe (PMD event) ──")
+    _optical_probe(fiber_nn, x_probe, MIC_CLASSES)
+
+    # Domain shift detection
+    X_shifted = X_te + rng_probe.normal(0, 3.0, X_te.shape)
+    shift = detect_domain_shift(X_tr, X_shifted)
+    print(f"\n  Domain-shift detector: {shift['drift_summary']}")
+    print(f"  Alerted features    : {shift['feature_alerts'][:8]}  (showing first 8)")
+
+    return fiber_nn, acc
 
 
 if __name__ == "__main__":

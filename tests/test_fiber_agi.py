@@ -460,5 +460,281 @@ class TestEndToEnd(unittest.TestCase):
             f"UC4 DCI fiber accuracy {acc:.1%} < 90% threshold")
 
 
+# ═══════════════════════════════════════════════════════════════
+# T8 — QUANTUM HOMODYNE RECEIVER
+# ═══════════════════════════════════════════════════════════════
+
+class TestQuantumHomodyneReceiver(unittest.TestCase):
+
+    def setUp(self):
+        from fiber_physics import QuantumHomodyneReceiver
+        self.QHR = QuantumHomodyneReceiver
+
+    def test_coherent_state_no_advantage(self):
+        """At r=0, quantum advantage must equal 1 (no squeezing)."""
+        qr = self.QHR(squeezing_r=0.0)
+        adv = qr.quantum_advantage(n_photons=100)
+        self.assertAlmostEqual(adv, 1.0, places=4)
+
+    def test_squeezing_reduces_variance(self):
+        """Squeezing r>0 must reduce x-quadrature variance below 1/4."""
+        qr_sq   = self.QHR(squeezing_r=1.0, eta=1.0)
+        qr_coh  = self.QHR(squeezing_r=0.0, eta=1.0)
+        v_sq    = qr_sq.shot_noise_variance(n_photons=100)
+        v_coh   = qr_coh.shot_noise_variance(n_photons=100)
+        self.assertLess(v_sq, v_coh)
+
+    def test_snr_improvement_positive(self):
+        """SNR improvement must be positive for r>0."""
+        qr = self.QHR(squeezing_r=0.5)
+        self.assertGreater(qr.snr_improvement_db(), 0.0)
+
+    def test_snr_improvement_zero_at_r0(self):
+        """SNR improvement must be 0 dB at r=0."""
+        qr = self.QHR(squeezing_r=0.0)
+        self.assertAlmostEqual(qr.snr_improvement_db(), 0.0, places=6)
+
+    def test_qfi_exceeds_cfi(self):
+        """QFI must exceed CFI for r>0, N>1."""
+        qr  = self.QHR(squeezing_r=1.0)
+        qfi = qr.quantum_fisher_information(50)
+        cfi = qr.classical_fisher_information(50)
+        self.assertGreater(qfi, cfi)
+
+    def test_qfi_equals_cfi_at_r0(self):
+        """At r=0 and N>>1: QFI ≈ N (cosh(0)=1, sinh(0)=0)."""
+        qr  = self.QHR(squeezing_r=0.0)
+        N   = 100.0
+        qfi = qr.quantum_fisher_information(N)
+        self.assertAlmostEqual(qfi, N, places=4)
+
+    def test_snr_8686_per_r(self):
+        """ΔSNRdB ≈ 8.686 per unit r (known analytical result)."""
+        qr    = self.QHR(squeezing_r=1.0)
+        delta = qr.snr_improvement_db()
+        self.assertAlmostEqual(delta, 8.686, places=2)
+
+    def test_invalid_r_raises(self):
+        """Negative squeezing must raise ValueError."""
+        with self.assertRaises(ValueError):
+            self.QHR(squeezing_r=-0.1)
+
+
+# ═══════════════════════════════════════════════════════════════
+# T3 — ONLINE FIBER TRAINER (EWC)
+# ═══════════════════════════════════════════════════════════════
+
+class TestOnlineFiberTrainer(unittest.TestCase):
+
+    def _make_separable(self):
+        rng = np.random.default_rng(11)
+        X0  = rng.normal([3, 0], 0.3, (20, 2))
+        X1  = rng.normal([-3, 0], 0.3, (20, 2))
+        X   = np.vstack([X0, X1])
+        Y   = np.vstack([np.tile([1, 0], (20, 1)), np.tile([0, 1], (20, 1))])
+        return X, Y
+
+    def test_import(self):
+        from recursive_dev import OnlineFiberTrainer
+        t = OnlineFiberTrainer([4, 8, 3], lr=1e-3)
+        self.assertEqual(t.sizes, [4, 8, 3])
+
+    def test_consolidate_sets_anchor(self):
+        from recursive_dev import OnlineFiberTrainer
+        X, Y = self._make_separable()
+        t = OnlineFiberTrainer([2, 8, 2], lr=1e-3)
+        t.consolidate(X, Y, n_samples=10)
+        self.assertTrue(t._consolidated)
+        self.assertEqual(len(t._anchor_W), len(t.W))
+        self.assertEqual(len(t._fisher_W), len(t.W))
+
+    def test_ewc_penalty_zero_before_consolidate(self):
+        from recursive_dev import OnlineFiberTrainer
+        t = OnlineFiberTrainer([2, 4, 2], lr=1e-3)
+        self.assertAlmostEqual(t.ewc_penalty(), 0.0)
+
+    def test_online_update_returns_float(self):
+        from recursive_dev import OnlineFiberTrainer
+        X, Y = self._make_separable()
+        t = OnlineFiberTrainer([2, 4, 2], lr=1e-3)
+        loss = t.online_update(X[0], Y[0])
+        self.assertIsInstance(loss, float)
+        self.assertGreater(loss, 0.0)
+
+    def test_stream_reduces_loss(self):
+        from recursive_dev import OnlineFiberTrainer
+        X, Y = self._make_separable()
+        t    = OnlineFiberTrainer([2, 16, 2], lr=5e-3)
+        losses = t.stream_train(X, Y, shuffle=False, verbose_every=0)
+        self.assertLess(losses[-1], losses[0])
+
+    def test_ewc_penalty_increases_after_divergence(self):
+        """After consolidation, diverging weights → larger EWC penalty."""
+        from recursive_dev import OnlineFiberTrainer
+        X, Y = self._make_separable()
+        t = OnlineFiberTrainer([2, 4, 2], lr=1e-3, lambda_ewc=1.0)
+        t.consolidate(X, Y, n_samples=20)
+        pen_before = t.ewc_penalty()
+        # Force-shift weights
+        for w in t.W:
+            w += 5.0
+        pen_after = t.ewc_penalty()
+        self.assertGreater(pen_after, pen_before)
+
+
+# ═══════════════════════════════════════════════════════════════
+# T1 — REAL DATA BRIDGE (CSV / JSON / domain shift)
+# ═══════════════════════════════════════════════════════════════
+
+class TestRealDataBridge(unittest.TestCase):
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.mkdtemp()
+
+    def _write_csv(self, filename, rows, header):
+        import csv
+        path = os.path.join(self.tmp, filename)
+        with open(path, 'w', newline='') as f:
+            w = csv.DictWriter(f, fieldnames=header)
+            w.writeheader()
+            w.writerows(rows)
+        return path
+
+    def test_load_csv_basic(self):
+        from use_cases import load_csv_dataset
+        header = ['OSNR', 'BER', 'label']
+        rows   = [{'OSNR': 28.0, 'BER': -7.0, 'label': 'Normal'},
+                  {'OSNR': 15.0, 'BER': -4.0, 'label': 'Impaired'},
+                  {'OSNR': 10.0, 'BER': -2.0, 'label': 'Critical'},]
+        path   = self._write_csv('test.csv', rows, header)
+        X, Y, classes = load_csv_dataset(path)
+        self.assertEqual(X.shape, (3, 2))
+        self.assertEqual(Y.shape, (3, 3))
+        self.assertEqual(len(classes), 3)
+
+    def test_load_csv_feature_cols(self):
+        from use_cases import load_csv_dataset
+        header = ['OSNR', 'BER', 'EVM', 'label']
+        rows   = [{'OSNR': 28.0, 'BER': -7.0, 'EVM': 2.0, 'label': 'OK'},
+                  {'OSNR': 15.0, 'BER': -4.0, 'EVM': 8.0, 'label': 'Bad'}]
+        path   = self._write_csv('test2.csv', rows, header)
+        X, Y, classes = load_csv_dataset(path, feature_cols=['OSNR', 'BER'])
+        self.assertEqual(X.shape, (2, 2))
+
+    def test_load_json_stream(self):
+        from use_cases import load_json_stream
+        import json
+        path = os.path.join(self.tmp, 'stream.ndjson')
+        with open(path, 'w') as f:
+            for i in range(5):
+                f.write(json.dumps({'osnr': 28.0, 'ber': -7.0,
+                                    'fault': 'normal'}) + '\n')
+            for i in range(5):
+                f.write(json.dumps({'osnr': 10.0, 'ber': -2.0,
+                                    'fault': 'break'}) + '\n')
+        X, Y, classes = load_json_stream(path, ['osnr', 'ber'], 'fault')
+        self.assertEqual(X.shape, (10, 2))
+        self.assertEqual(len(classes), 2)
+
+    def test_detect_domain_shift_true(self):
+        from use_cases import detect_domain_shift
+        X_ref = np.random.default_rng(0).normal(0, 1, (50, 8))
+        X_new = X_ref + 10.0   # massive shift
+        result = detect_domain_shift(X_ref, X_new)
+        self.assertTrue(result['shifted'])
+        self.assertGreater(result['max_z'], 2.0)
+
+    def test_detect_domain_shift_false(self):
+        from use_cases import detect_domain_shift
+        rng   = np.random.default_rng(5)
+        X_ref = rng.normal(0, 1, (50, 8))
+        X_new = rng.normal(0, 1, (50, 8))   # same distribution
+        result = detect_domain_shift(X_ref, X_new, threshold=5.0)
+        self.assertFalse(result['shifted'])
+
+
+# ═══════════════════════════════════════════════════════════════
+# T2 — MIC-64 SCALE BREAKOUT
+# ═══════════════════════════════════════════════════════════════
+
+class TestMIC64(unittest.TestCase):
+
+    def test_feature_count(self):
+        from use_cases import MIC64_FEATURES
+        self.assertEqual(len(MIC64_FEATURES), 64)
+
+    def test_sample_shape(self):
+        from use_cases import _mic64_sample
+        rng = np.random.default_rng(0)
+        x   = _mic64_sample(rng, 0)
+        self.assertEqual(x.shape, (64,))
+
+    def test_all_labels(self):
+        from use_cases import _mic64_sample, MIC_CLASSES
+        rng = np.random.default_rng(0)
+        for lbl in range(len(MIC_CLASSES)):
+            x = _mic64_sample(rng, lbl)
+            self.assertEqual(x.shape, (64,))
+
+    def test_dataset_shape(self):
+        from use_cases import generate_mic64_dataset
+        X, Y = generate_mic64_dataset(n=50, seed=0)
+        self.assertEqual(X.shape, (50, 64))
+        self.assertEqual(Y.shape, (50, 5))
+
+    def test_one_hot_labels(self):
+        from use_cases import generate_mic64_dataset
+        _, Y = generate_mic64_dataset(n=50, seed=0)
+        np.testing.assert_array_equal(Y.sum(axis=1), np.ones(50))
+
+
+# ═══════════════════════════════════════════════════════════════
+# T4 — PRISM API
+# ═══════════════════════════════════════════════════════════════
+
+class TestPRISMAPI(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        from prism_api import PRISMApp
+        cls.app = PRISMApp(rng_seed=0)
+
+    def test_health_ok(self):
+        h = self.app.health()
+        self.assertEqual(h['status'], 'ok')
+        self.assertIn('mic', h['available_models'])
+
+    def test_models_list(self):
+        models = self.app.models()
+        ids = [m['id'] for m in models]
+        for uc in ['mic', 'amc', 'fde', 'dci']:
+            self.assertIn(uc, ids)
+
+    def test_infer_mic_returns_class(self):
+        x = [2.0, 14.0, 0.85, -7.0, 0.1, 3.0, 10.0, 1.0]
+        result = self.app.infer('mic', x)
+        self.assertIn(result['predicted_class'], ['Normal', 'CD-dominant',
+            'PMD-dominant', 'OSNR-limited', 'Nonlinear'])
+        self.assertAlmostEqual(
+            sum(result['probabilities'].values()), 1.0, places=4)
+
+    def test_infer_confidence_in_range(self):
+        x = [2.0, 14.0, 0.85, -7.0, 0.1, 3.0, 10.0, 1.0]
+        result = self.app.infer('mic', x)
+        self.assertGreaterEqual(result['confidence'], 0.0)
+        self.assertLessEqual(result['confidence'], 1.0)
+
+    def test_infer_invalid_model_raises(self):
+        with self.assertRaises(ValueError):
+            self.app.infer('nonexistent_uc', [1.0, 2.0])
+
+    def test_domain_shift_returns_dict(self):
+        X_batch = [[2.0, 14.0, 0.85, -7.0, 0.1, 3.0, 10.0, 1.0]] * 5
+        result  = self.app.check_domain_shift('mic', X_batch)
+        self.assertIn('shifted', result)
+        self.assertIn('z_scores', result)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

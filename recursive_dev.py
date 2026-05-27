@@ -462,3 +462,163 @@ class RecursiveDevelopmentEngine:
                   f"{out[0]:>6.3f}  {out[1]:>6.3f}  {out[2]:>6.3f}  {mark:>3}")
         print(f"  {'─'*48}")
         print(f"  Sample accuracy: {ok}/{min(n, len(self.X_te))}")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+class OnlineFiberTrainer(CrossEntropyTrainer):
+    """
+    T3 — Online learning: streaming EWC-regularised updates.
+
+    Elastic Weight Consolidation (EWC) models each previously learned
+    weight as an elastic spring. The spring constant is the diagonal of
+    the Fisher Information Matrix (FIM) — weights that were "load-bearing"
+    for old tasks resist change; irrelevant weights update freely.
+
+    Physical analogy:
+        In a coherent fiber NN, high-FIM weights correspond to optical
+        path segments whose amplitude is critical for correct inference.
+        Changing them is like thermally stressing a fusion splice — it
+        can be done, but costs signal quality. EWC is a digital DCF that
+        compensates for catastrophic forgetting.
+
+    EWC penalty:
+        L_ewc = (λ/2) · Σᵢ Fᵢ · (θᵢ - θ*ᵢ)²
+        Fᵢ   : Fisher diagonal for parameter i
+        θ*ᵢ  : optimal weights from previous task
+        λ    : EWC regularisation strength
+
+    Usage:
+        trainer = OnlineFiberTrainer([8, 20, 5], lr=1e-4)
+        # ... initial training ...
+        trainer.consolidate()          # save θ* and compute FIM
+        for x, y in stream:
+            trainer.online_update(x, y, lambda_ewc=1.0)
+    """
+
+    def __init__(self, layer_sizes, lr: float = 1e-4, l2: float = 1e-5,
+                 lambda_ewc: float = 1.0):
+        super().__init__(layer_sizes, lr=lr, l2=l2)
+        self.lambda_ewc  = lambda_ewc
+        self._fisher_W:  list[np.ndarray] = []
+        self._fisher_b:  list[np.ndarray] = []
+        self._anchor_W:  list[np.ndarray] = []
+        self._anchor_b:  list[np.ndarray] = []
+        self._consolidated = False
+
+    # ── Fisher diagonal estimation ─────────────────────────────────────────
+    def compute_fisher(self, X: np.ndarray, Y: np.ndarray,
+                       n_samples: int = 200) -> None:
+        """
+        Estimate diagonal Fisher Information Matrix using squared gradients.
+        FIM ≈ E[(∂ log p / ∂θ)²]
+
+        Uses a random subsample for efficiency; n_samples ≤ len(X).
+        """
+        rng = np.random.default_rng(0)
+        idx = rng.choice(len(X), min(n_samples, len(X)), replace=False)
+
+        # Accumulate squared gradients
+        fW = [np.zeros_like(w) for w in self.W]
+        fb = [np.zeros_like(b) for b in self.b]
+
+        for i in idx:
+            x_n = minmax_norm(X[i])
+            self.forward(x_n)
+            gW, gb = self.backward_ce(Y[i])
+            for j in range(len(self.W)):
+                fW[j] += gW[j] ** 2
+                fb[j] += gb[j] ** 2
+
+        n = max(len(idx), 1)
+        self._fisher_W = [f / n for f in fW]
+        self._fisher_b = [f / n for f in fb]
+
+    def consolidate(self, X: np.ndarray | None = None,
+                    Y: np.ndarray | None = None,
+                    n_samples: int = 200) -> None:
+        """
+        Anchor current weights as θ* and compute FIM.
+        Call after training on a task, before exposing to new data.
+        """
+        self._anchor_W = [w.copy() for w in self.W]
+        self._anchor_b = [b.copy() for b in self.b]
+        if X is not None and Y is not None:
+            self.compute_fisher(X, Y, n_samples=n_samples)
+        else:
+            # Uninformative prior: uniform Fisher (standard L2)
+            self._fisher_W = [np.ones_like(w) for w in self.W]
+            self._fisher_b = [np.ones_like(b) for b in self.b]
+        self._consolidated = True
+
+    # ── EWC gradient ──────────────────────────────────────────────────────
+    def ewc_penalty(self) -> float:
+        """Scalar EWC penalty for monitoring (not used in gradient directly)."""
+        if not self._consolidated:
+            return 0.0
+        pen = 0.0
+        for j in range(len(self.W)):
+            pen += float(np.sum(
+                self._fisher_W[j] * (self.W[j] - self._anchor_W[j]) ** 2))
+            pen += float(np.sum(
+                self._fisher_b[j] * (self.b[j] - self._anchor_b[j]) ** 2))
+        return 0.5 * self.lambda_ewc * pen
+
+    def backward_ewc(self, y_true: np.ndarray) -> tuple:
+        """
+        EWC-regularised backward pass.
+        Gradient = CE gradient + λ · F · (θ - θ*)
+        """
+        gW, gb = self.backward_ce(y_true)
+        if not self._consolidated:
+            return gW, gb
+        for j in range(len(self.W)):
+            gW[j] += self.lambda_ewc * (
+                self._fisher_W[j] * (self.W[j] - self._anchor_W[j]))
+            gb[j] += self.lambda_ewc * (
+                self._fisher_b[j] * (self.b[j] - self._anchor_b[j]))
+        return gW, gb
+
+    # ── Online update ──────────────────────────────────────────────────────
+    def online_update(self, x_raw: np.ndarray, y_true: np.ndarray,
+                      lambda_ewc: float | None = None) -> float:
+        """
+        Single-sample online update with optional EWC regularisation.
+
+        Args:
+            x_raw      : raw (unnormalized) input feature vector
+            y_true     : one-hot label
+            lambda_ewc : override instance lambda (None = use self.lambda_ewc)
+
+        Returns:
+            float: cross-entropy loss for this sample
+        """
+        if lambda_ewc is not None:
+            old_lam = self.lambda_ewc
+            self.lambda_ewc = float(lambda_ewc)
+
+        x_n   = minmax_norm(x_raw)
+        y_hat = self.forward(x_n)
+        loss  = self._ce(y_hat, y_true)
+        gW, gb = self.backward_ewc(y_true)
+        self._adam(gW, gb)
+
+        if lambda_ewc is not None:
+            self.lambda_ewc = old_lam
+
+        return loss
+
+    def stream_train(self, X: np.ndarray, Y: np.ndarray,
+                     shuffle: bool = True, verbose_every: int = 100) -> list[float]:
+        """
+        One pass over (X, Y) as a stream.  Returns per-sample loss log.
+        """
+        rng = np.random.default_rng(self.t)
+        idx = rng.permutation(len(X)) if shuffle else np.arange(len(X))
+        losses = []
+        for k, i in enumerate(idx):
+            loss = self.online_update(X[i], Y[i])
+            losses.append(loss)
+            if verbose_every and k % verbose_every == 0:
+                print(f"    [online] sample {k:>5}/{len(X)}  "
+                      f"CE={loss:.5f}  EWC_pen={self.ewc_penalty():.5f}")
+        return losses

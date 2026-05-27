@@ -236,3 +236,117 @@ class Photodetector:
 
     def detect_noiseless(self, E_field):
         return self.R * float(np.abs(E_field) ** 2)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+class QuantumHomodyneReceiver:
+    """
+    T8 — Quantum extension: squeezed-light homodyne receiver.
+
+    Classical homodyne variance (shot-noise limit):
+        V_x^{coh} = 1 / (4N)        N = mean photon number
+
+    Squeezed-light variance (squeezing parameter r ≥ 0):
+        V_x^{sq}  = e^{-2r} / 4     (x-quadrature squeezed)
+        V_p^{sq}  = e^{+2r} / 4     (p-quadrature anti-squeezed)
+
+    Quantum Fisher Information (phase estimation):
+        QFI = N² · sinh²(r) + N · cosh(2r)
+
+    Classical Fisher Information (coherent state):
+        CFI = N
+
+    SNR improvement (dB):
+        ΔSNRdb = 10·log10(e^{2r}) = 20r/ln(10) ≈ 8.686 · r   [dB]
+
+    Physical reference: Caves 1981; Demkowicz-Dobrzański 2015.
+    """
+
+    def __init__(self, squeezing_r: float = 0.0,
+                 responsivity: float = PD_RESPONSIVITY,
+                 eta: float = 0.95):
+        """
+        Args:
+            squeezing_r  : squeezing parameter r ≥ 0  (r=0 = coherent state)
+            responsivity : detector quantum efficiency × responsivity
+            eta          : homodyne efficiency (losses in optical path, 0–1)
+        """
+        if squeezing_r < 0:
+            raise ValueError("squeezing_r must be ≥ 0")
+        self.r    = float(squeezing_r)
+        self.R    = responsivity
+        self.eta  = float(np.clip(eta, 1e-6, 1.0))
+
+    # ── Noise variances ────────────────────────────────────────────────────
+    def shot_noise_variance(self, n_photons: float) -> float:
+        """
+        Homodyne x-quadrature shot noise variance.
+        Coherent: 1/(4N). Squeezed: e^{-2r}/4. Includes detection loss η.
+        """
+        v_sq  = np.exp(-2 * self.r) / 4.0
+        v_vac = 1.0 / 4.0                   # vacuum variance
+        # Measured variance with efficiency loss:  η·V_sq + (1-η)·V_vac
+        return float(self.eta * v_sq + (1.0 - self.eta) * v_vac)
+
+    def antisqueezed_variance(self) -> float:
+        """p-quadrature anti-squeezed variance: e^{+2r}/4."""
+        return float(np.exp(2 * self.r) / 4.0)
+
+    # ── SNR improvement ────────────────────────────────────────────────────
+    def snr_improvement_db(self) -> float:
+        """
+        SNR gain from squeezing vs coherent shot noise (dB).
+        ΔSNRdB = 20·r / ln(10) ≈ 8.686 · r
+        """
+        return float(20.0 * self.r / np.log(10))
+
+    # ── Fisher information ─────────────────────────────────────────────────
+    def quantum_fisher_information(self, n_photons: float) -> float:
+        """
+        QFI for phase estimation with squeezed light.
+        QFI = N² sinh²(r) + N cosh(2r)
+        At r=0: QFI = N  (shot-noise limited).
+        """
+        N = float(n_photons)
+        return float(N**2 * np.sinh(self.r)**2 + N * np.cosh(2 * self.r))
+
+    def classical_fisher_information(self, n_photons: float) -> float:
+        """CFI for coherent state (shot-noise limit): QFI = N."""
+        return float(n_photons)
+
+    def quantum_advantage(self, n_photons: float) -> float:
+        """
+        Ratio QFI / CFI. Values > 1 indicate quantum advantage.
+        At r=0: ratio = 1 (no advantage). At r=1, N=100: ~76.
+        """
+        cfi = self.classical_fisher_information(n_photons)
+        if cfi < 1e-15:
+            return 1.0
+        return float(self.quantum_fisher_information(n_photons) / cfi)
+
+    # ── Effective detection ────────────────────────────────────────────────
+    def homodyne_snr(self, signal_amplitude: float, n_photons: float) -> float:
+        """
+        SNR of homodyne x-quadrature measurement.
+        SNR = (R·|E|)² / V_noise  (linear, not dB)
+        """
+        v_noise = self.shot_noise_variance(n_photons)
+        return float((self.R * abs(signal_amplitude))**2 / (v_noise + 1e-30))
+
+    # ── Summary ────────────────────────────────────────────────────────────
+    def report(self, n_photons: float = 100.0):
+        """Print quantum receiver parameter summary."""
+        print(f"\n  Quantum Homodyne Receiver  (r={self.r:.3f}, η={self.eta:.2f})")
+        print(f"  {'─'*52}")
+        print(f"  Squeezing parameter r    : {self.r:.4f}")
+        print(f"  x-variance (shot-noise)  : {self.shot_noise_variance(n_photons):.6f}")
+        print(f"  p-variance (anti-sq.)    : {self.antisqueezed_variance():.6f}")
+        print(f"  SNR improvement          : {self.snr_improvement_db():.2f} dB")
+        print(f"  QFI  (N={n_photons:.0f})           : "
+              f"{self.quantum_fisher_information(n_photons):.2f}")
+        print(f"  CFI  (N={n_photons:.0f})           : "
+              f"{self.classical_fisher_information(n_photons):.2f}")
+        print(f"  Quantum advantage        : "
+              f"{self.quantum_advantage(n_photons):.2f}×")
+        print(f"  Heisenberg limit (N²)    : {n_photons**2:.0f}")
+        print(f"  {'─'*52}")

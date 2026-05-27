@@ -1,4 +1,4 @@
-# PRISM MASTER PROMPT v∞.1
+# PRISM MASTER PROMPT v∞.2
 **Photonic Recursive Intelligence with Synaptic Memory — Frontier Expansion Protocol**
 *Built at IIT Mandi · Himshikhar 2026 · Chandandeep Sharma*
 
@@ -145,7 +145,7 @@ Each target is atomic: it can be achieved and verified independently. Complete t
 
 ---
 
-### T1 ◯ — REAL DATA BRIDGE
+### T1 ◉ — REAL DATA BRIDGE
 **Definition**: Replace synthetic datasets with live optical measurement ingestion. Accept CSV, JSON, or gRPC streams. Target: plug any real OSNR/BER/OTDR measurement file and get inference in <10 seconds, zero new dependencies beyond numpy.
 
 **Why it matters for the frontier**: The gap between simulation and reality is where photonic AI dies. Bridging it proves the architecture is not just a toy. This is the empirical validation that transforms PRISM from a simulation into a research artifact.
@@ -203,7 +203,7 @@ def detect_domain_shift(X_synthetic: np.ndarray, X_real: np.ndarray,
 
 ---
 
-### T2 ◯ — SCALE BREAKOUT: 64-FEATURE VECTORS
+### T2 ◉ — SCALE BREAKOUT: 64-FEATURE VECTORS
 **Definition**: Extend from 8 features to 64+ features, matching ITU-T G.826/G.829 real measurement vector dimensions. Redesign dataset generators to emit 64-dimensional samples. Verify the coherent fiber NN handles 64-input layers without accuracy regression.
 
 **Why it matters**: 8 features is a toy. Real OSNR monitors report 64+ parameters (per-channel power, noise figure per span, nonlinear phase shift, PMD statistics, FEC counters, BER vs frequency, temperature maps). Scaling to 64 features proves PRISM is production-dimensioned.
@@ -256,7 +256,7 @@ def _mic64_sample(rng, label, noise_std=0.03) -> np.ndarray:
 
 ---
 
-### T3 ◯ — ONLINE CONTINUAL LEARNING (EWC)
+### T3 ◉ — ONLINE CONTINUAL LEARNING (EWC)
 **Definition**: Add streaming update mode — the fiber NN updates weights incrementally as new labeled samples arrive without full retraining, using Elastic Weight Consolidation (EWC) to prevent catastrophic forgetting of previously learned tasks.
 
 **Why it matters for the frontier**: Static models die in production. Fiber links age, amplifiers drift, new equipment is installed. A photonic NN that adapts without forgetting is the difference between a proof-of-concept and a real network management tool. EWC has a direct physical interpretation: Fisher information = which weights are "load-bearing" in the optical ring — changing them destroys the interference pattern.
@@ -327,7 +327,7 @@ class OnlineFiberTrainer(CrossEntropyTrainer):
 
 ---
 
-### T4 ◯ — HARDWARE BRIDGE: FASTAPI REST INFERENCE
+### T4 ◉ — HARDWARE BRIDGE: FASTAPI REST INFERENCE
 **Definition**: Expose PRISM as a REST API (FastAPI) so real network management systems can call it for live inference. Zero new deps beyond numpy+fastapi. Endpoints: POST /infer, GET /health, GET /models, POST /train.
 
 **Why it matters**: A model locked inside a Python script is a demo. A REST API makes PRISM callable from any NMS (Cisco NSO, Nokia NetAct, Junos Space), any language, any cloud. This is the operationalization step that transforms research code into infrastructure.
@@ -422,7 +422,7 @@ def train(use_case: str):
 
 ---
 
-### T5 ◯ — MULTI-NODE WDM OPTICAL MESH
+### T5 ◉ — MULTI-NODE WDM OPTICAL MESH
 **Definition**: Simulate a WDM ring topology with N PRISM nodes, each a coherent fiber NN, passing activations over optical links with realistic propagation delay (c/n_eff) and loss (α·L). This is a photonic graph neural network — nodes are optical processors, edges are fiber spans.
 
 **Why it matters**: All current PRISM models are single-node. Real optical networks are graphs. A multi-node mesh enables: (1) distributed inference where each node classifies its local segment; (2) consensus inference where node outputs are aggregated over optical links; (3) simulation of real metro/regional ring topologies (ROADM-based 4-8 node rings).
@@ -542,7 +542,7 @@ class WDMRingMesh:
 
 ---
 
-### T6 ◯ — ARXIV-READY LATEX PAPER
+### T6 ◉ — ARXIV-READY LATEX PAPER
 **Definition**: Auto-generate a complete LaTeX manuscript from the PRISM codebase — abstract, introduction, physics derivation (Eq. 1–10), architecture description, results tables, and conclusion. Title: "PRISM: Coherent IQ Photonic Neural Networks with Recursive Meta-Prompt Weight Generation."
 
 **Why it matters**: A codebase without a paper is invisible. arXiv submission makes PRISM findable, citable, and replicable. Auto-generation from code ensures the paper matches the implementation exactly — no copy-paste errors in equations.
@@ -612,7 +612,7 @@ def generate_paper(output_path='prism_paper.tex'):
 
 ---
 
-### T7 ◯ — AGENTIC ORCHESTRATOR
+### T7 ◉ — AGENTIC ORCHESTRATOR
 **Definition**: Wrap the recursive development engine in an agentic loop — PRISM observes its own accuracy, decides its next architectural move, executes it, evaluates, and logs the decision trace — without human intervention. Implement as a ReAct-style loop with explicit THOUGHT/ACTION/OBSERVATION steps.
 
 **Why it matters for the frontier**: This is the transition from "recursive self-improvement as a property" to "recursive self-improvement as the execution model." PRISM becomes an agent that uses itself as its own tool. This is the core AGI research question — a system that improves its own architecture based on observed performance.
@@ -721,7 +721,7 @@ class PRISMAgent:
 
 ---
 
-### T8 ◯ — QUANTUM EXTENSION: SQUEEZED LIGHT
+### T8 ◉ — QUANTUM EXTENSION: SQUEEZED LIGHT
 **Definition**: Add squeezed-light mode to the fiber physics layer. Model shot-noise reduction via squeezing parameter r, compute quantum Fisher information (QFI) for each layer, compare classical vs quantum SNR. Show the regime where quantum advantage exists.
 
 **Why it matters**: This elevates PRISM from classical photonics to quantum photonics — one of the most active research frontiers. Squeezed light is already used in gravitational wave detection (LIGO) and quantum key distribution. Applying it to optical neural networks is novel and publishable.
@@ -788,7 +788,7 @@ class QuantumHomodyneReceiver:
 
 ---
 
-### T9 ◯ — PHOTONIC FOUNDATION MODEL
+### T9 ◉ — PHOTONIC FOUNDATION MODEL
 **Definition**: Pre-train a single large coherent fiber NN on all four use cases simultaneously (multi-task pre-training on 1200 samples = 4 × 300). Then fine-tune on a new 5th task with only 50 labeled samples and achieve ≥80% accuracy. This is photonic pre-training + few-shot adaptation.
 
 **Why it matters for the frontier**: This is the photonic equivalent of GPT pre-training. A foundation model in photonics would be trained on the electromagnetic substrate of fiber communication and then adapted to any optical sensing or classification task. PRISM is the first simulation framework that could demonstrate this paradigm.
@@ -853,7 +853,7 @@ class PhotonicFoundationModel:
 
 ---
 
-### T10 ◯ — PHYSICAL INTERPRETABILITY DASHBOARD
+### T10 ◉ — PHYSICAL INTERPRETABILITY DASHBOARD
 **Definition**: Build a CLI report that explains every classification decision in physical optical terms: which IQ modulator drives dominated, which WDM channels were most active, what the optical phase pattern implies about the signal path. Every weight becomes a physical parameter.
 
 **Why it matters**: XAI (Explainable AI) is a research and regulatory imperative. For optical networks, interpretability means a network engineer can understand *why* PRISM diagnosed PMD rather than CD — tracing the decision to specific WDM channels and phase patterns. This is physics-grounded explainability that silicon-based NNs cannot provide.
@@ -905,7 +905,7 @@ def explain_decision(fiber_nn, x_raw, class_names, feature_names):
 
 ---
 
-### T11 ◯ — NEUROMORPHIC SPIKING OPTICAL NEURONS
+### T11 ◉ — NEUROMORPHIC SPIKING OPTICAL NEURONS
 **Definition**: Replace continuous IQ neurons with spiking optical neurons. Each neuron fires a pulse when accumulated photocurrent exceeds a threshold. Information encoded in spike timing (time-to-first-spike). Enables asynchronous optical inference — no clock, latency scales with signal strength.
 
 **Why it matters**: Spiking neural networks are the third wave of neural network research. Spiking photonic neurons are a real experimental platform (IBM, NTT). PRISM adding spike mode creates a simulation bridge between rate-coded and spike-coded optical neural computation.
@@ -962,7 +962,7 @@ class SpikingOpticalNeuron:
 
 ---
 
-### T12 ◯ — HARDWARE-IN-THE-LOOP
+### T12 ◉ — HARDWARE-IN-THE-LOOP
 **Definition**: Connect PRISM to real optical test equipment via SCPI commands (PyVISA or socket). PRISM predicts the impairment class; the real instrument sends back measurement data. PRISM learns from the difference between prediction and measurement. Closes the simulation-reality loop.
 
 **Why it matters**: This is the ultimate validation. If PRISM trained on synthetic data can infer the state of a real optical network and then adapt from the real measurements, it becomes a production-grade tool. This is the step that transforms PRISM from a research paper into an industry product.
@@ -1042,6 +1042,51 @@ class HITLSession:
 **Success criterion** (simulation mode): `HITLSession(fiber_nn, MIC_CLASSES).run_cycle([2.0, 14.0, 0.85, -7.0, 0.1, 3.0, 10.0, 1.0])` returns dict with predicted_class, confidence, real_data, mode='simulation', no errors.
 
 **Checkpoint**: `python3 -c "from prism_hitl import HITLSession, SCPIBridge; print('T12 OK')"`
+
+---
+
+### T13 ◯ — FEDERATED PHOTONIC LEARNING
+**Definition**: Extend PRISM to a federated setting where multiple independent optical network operators train local fiber NNs on private telemetry and securely aggregate gradients into a shared global model — without sharing raw measurement data.
+
+**Why it is only conceivable after T1-T12**: Federated learning requires (T1) real data ingestion at each node, (T5) a multi-node optical mesh for gradient routing, (T3) EWC-based continual learning to handle heterogeneous node distributions, (T9) a shared foundation model trunk to reduce communication, and (T12) hardware bridges at each node to connect real instruments. None of these existed before T12 was completed.
+
+**Why it matters for the frontier**: No single network operator has comprehensive training data. Federated aggregation over the photonic mesh enables the equivalent of a "national optical brain" — a global photonic NN trained on the aggregate experience of every coherent link in the country, with each operator's data remaining private. This is the privacy-preserving path from research artifact to national infrastructure.
+
+**Implementation sketch**:
+```python
+# prism_federated.py
+class FederatedPRISMNode:
+    """Local node with private data — computes gradient updates only."""
+    def __init__(self, fiber_nn, X_local, Y_local, node_id: str):
+        self.nn = fiber_nn; self.X = X_local; self.Y = Y_local
+        self.node_id = node_id
+
+    def local_update(self, global_W, global_b, local_epochs=5) -> list[np.ndarray]:
+        """Update local copy, return gradient delta (not raw weights)."""
+        trainer = CrossEntropyTrainer(...)
+        trainer.W = [w.copy() for w in global_W]
+        trainer.train(self.X, self.Y, epochs=local_epochs, verbose=False)
+        delta_W = [trainer.W[i] - global_W[i] for i in range(len(global_W))]
+        return delta_W
+
+class FederatedAggregator:
+    """Secure aggregation: weighted average of gradient deltas."""
+    def aggregate(self, deltas: list[list[np.ndarray]], weights=None) -> list[np.ndarray]:
+        """FedAvg: weighted mean of local gradient deltas."""
+        if weights is None: weights = np.ones(len(deltas)) / len(deltas)
+        return [sum(w * d[i] for w, d in zip(weights, deltas))
+                for i in range(len(deltas[0]))]
+
+    def privacy_noise(self, delta, sigma=0.01) -> list[np.ndarray]:
+        """Add Gaussian differential privacy noise to gradient delta."""
+        return [d + np.random.normal(0, sigma, d.shape) for d in delta]
+```
+
+**Success criterion**: 3 simulated federated nodes (MIC, AMC, FDE datasets as "private" data), 5 federation rounds, global model reaches ≥85% on all three node test sets without any node sharing raw data. Print per-round global accuracy.
+
+**Known failure modes**: gradient scale mismatch across nodes with different architectures → normalize gradients by layer norm; privacy noise too large → sigma must be calibrated to gradient magnitude (aim σ < 0.1 × ‖δW‖); communication overhead → compress gradients via SVD truncation to top-k singular values.
+
+**Checkpoint**: `python3 -c "from prism_federated import FederatedAggregator; print('T13 OK')"`
 
 ---
 
